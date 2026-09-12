@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Dockerized Eye Blink Detection</title>
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+
+            margin: 0;
+            padding: 30px;
+
+            background: #111;
+            color: white;
+
+            font-family: Arial, sans-serif;
+
+        }
+
+
+        h1 {
+
+            text-align: center;
+            margin-bottom: 30px;
+
+        }
+
+
+        /* ==============================
+           VIDEO CONTAINER
+        ============================== */
+
+        .video-container {
+
+            display: flex;
+
+            gap: 25px;
+
+            width: 100%;
+
+        }
+
+
+        .video-box {
+
+            flex: 1;
+
+            background: #222;
+
+            padding: 20px;
+
+            border-radius: 15px;
+
+            text-align: center;
+
+        }
+
+
+        .video-box h2 {
+
+            margin-top: 0;
+
+            margin-bottom: 20px;
+
+        }
+
+
+        /* ==============================
+           WEBCAM + PROCESSED VIDEO
+        ============================== */
+
+        #video,
+        #processedVideo {
+
+            width: 100%;
+
+            aspect-ratio: 4 / 3;
+
+            height: auto;
+
+            object-fit: cover;
+
+            display: block;
+
+            border-radius: 10px;
+
+            background: black;
+
+        }
+
+
+        /* ==============================
+           START BUTTON
+        ============================== */
+
+        button {
+
+            margin-top: 25px;
+
+            padding: 12px 25px;
+
+            font-size: 16px;
+
+            border: none;
+
+            border-radius: 8px;
+
+            cursor: pointer;
+
+        }
+
+
+        /* ==============================
+           INFORMATION CARDS
+        ============================== */
+
+        .stats {
+
+            display: flex;
+
+            justify-content: center;
+
+            gap: 25px;
+
+            margin-top: 30px;
+
+        }
+
+
+        .card {
+
+            width: 190px;
+
+            padding: 25px;
+
+            background: #222;
+
+            border-radius: 12px;
+
+            text-align: center;
+
+        }
+
+
+        .card-title {
+
+            color: #aaa;
+
+            font-size: 16px;
+
+            margin-bottom: 15px;
+
+        }
+
+
+        .card-value {
+
+            font-size: 30px;
+
+            font-weight: bold;
+
+        }
+
+
+        /* ==============================
+           CONNECTION STATUS
+        ============================== */
+
+        #status {
+
+            text-align: center;
+
+            margin-top: 25px;
+
+            font-size: 18px;
+
+            color: #00ff66;
+
+        }
+
+
+        /* ==============================
+           RESPONSIVE
+        ============================== */
+
+        @media (max-width: 900px) {
+
+            .video-container {
+
+                flex-direction: column;
+
+            }
+
+            .stats {
+
+                flex-direction: column;
+
+                align-items: center;
+
+            }
+
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+    <h1>
+        Dockerized Eye Blink Detection
+    </h1>
+
+
+    <!-- =================================
+         VIDEO SECTION
+    ================================== -->
+
+    <div class="video-container">
+
+
+        <!-- Webcam -->
+
+        <div class="video-box">
+
+            <h2>
+                Webcam
+            </h2>
+
+            <video
+                id="video"
+                autoplay
+                playsinline>
+            </video>
+
+        </div>
+
+
+        <!-- Docker Processed Video -->
+
+        <div class="video-box">
+
+            <h2>
+                Processed by Docker
+            </h2>
+
+            <img
+                id="processedVideo"
+                alt="Processed video">
+
+        </div>
+
+
+    </div>
+
+
+    <!-- =================================
+         START BUTTON
+    ================================== -->
+
+    <div style="text-align:center;">
+
+        <button
+            id="startButton"
+            onclick="startCamera()">
+
+            Start Camera
+
+        </button>
+
+    </div>
+
+
+    <!-- =================================
+         STATISTICS
+    ================================== -->
+
+    <div class="stats">
+
+
+        <div class="card">
+
+            <div class="card-title">
+                Blink Count
+            </div>
+
+            <div
+                class="card-value"
+                id="blinkCount">
+
+                0
+
+            </div>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="card-title">
+                Eye Aspect Ratio
+            </div>
+
+            <div
+                class="card-value"
+                id="ear">
+
+                --
+
+            </div>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="card-title">
+                Last Blink
+            </div>
+
+            <div
+                class="card-value"
+                id="lastBlink">
+
+                --
+
+            </div>
+
+        </div>
+
+
+    </div>
+
+
+    <!-- =================================
+         STATUS
+    ================================== -->
+
+    <div id="status">
+
+        Docker computer-vision pipeline disconnected
+
+    </div>
+
+
+<script>
+
+
+// ======================================
+// GLOBAL VARIABLES
+// ======================================
+
+let video =
+    document.getElementById("video");
+
+let processedVideo =
+    document.getElementById("processedVideo");
+
+let blinkCount =
+    document.getElementById("blinkCount");
+
+let ear =
+    document.getElementById("ear");
+
+let lastBlink =
+    document.getElementById("lastBlink");
+
+let status =
+    document.getElementById("status");
+
+let stream = null;
+
+let socket = null;
+
+
+// ======================================
+// SHOW NOTIFICATION
+// ======================================
+
+function showNotification() {
+
+    if (!("Notification" in window)) {
+
+        alert(
+            "You haven't blinked for 5 seconds!"
+        );
+
+        return;
+
+    }
+
+
+    if (Notification.permission === "granted") {
+
+        new Notification(
+            "Blink Reminder",
+            {
+                body:
+                    "You haven't blinked for 5 seconds!"
+            }
+        );
+
+    }
+
+}
+
+
+// ======================================
+// START CAMERA
+// ======================================
+
+async function startCamera() {
+
+    try {
+
+
+        // ------------------------------
+        // Notification permission
+        // ------------------------------
+
+        if (
+            "Notification" in window &&
+            Notification.permission === "default"
+        ) {
+
+            await Notification.requestPermission();
+
+        }
+
+
+        // ------------------------------
+        // Camera
+        // ------------------------------
+
+        stream =
+            await navigator.mediaDevices
+                .getUserMedia({
+
+                    video: true,
+
+                    audio: false
+
+                });
+
+
+        video.srcObject = stream;
+
+
+        // ------------------------------
+        // Connect WebSocket
+        // ------------------------------
+
+        connectWebSocket();
+
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "Camera error:",
+            error
+        );
+
+        status.textContent =
+            "Camera access failed";
+
+        status.style.color =
+            "red";
+
+    }
+
+}
+
+
+// ======================================
+// CONNECT WEBSOCKET
+// ======================================
+
+function connectWebSocket() {
+
+
+    const protocol =
+        window.location.protocol === "https:"
+            ? "wss:"
+            : "ws:";
+
+
+    socket =
+        new WebSocket(
+            protocol +
+            "//" +
+            window.location.host +
+            "/ws"
+        );
+
+
+    // ------------------------------
+    // WebSocket opened
+    // ------------------------------
+
+    socket.onopen = function() {
+
+        console.log(
+            "WebSocket connected"
+        );
+
+        status.textContent =
+            "Docker computer-vision pipeline connected";
+
+        status.style.color =
+            "#00ff66";
+
+
+        sendFrame();
+
+    };
+
+
+    // ------------------------------
+    // Receive processed frame
+    // ------------------------------
+
+    socket.onmessage = function(event) {
+
+
+        const data =
+            JSON.parse(event.data);
+
+
+        // ------------------------------
+        // Processed image
+        // ------------------------------
+
+        processedVideo.src =
+            "data:image/jpeg;base64," +
+            data.image;
+
+
+        // ------------------------------
+        // Blink count
+        // ------------------------------
+
+        blinkCount.textContent =
+            data.blink_count;
+
+
+        // ------------------------------
+        // EAR
+        // ------------------------------
+
+        ear.textContent =
+            Number(data.ear).toFixed(3);
+
+
+        // ------------------------------
+        // Last blink
+        // ------------------------------
+
+        lastBlink.textContent =
+            data.last_blink + " s";
+
+
+        // ------------------------------
+        // Notification
+        // ------------------------------
+
+        if (
+            data.notification === true
+        ) {
+
+            showNotification();
+
+        }
+
+
+        // ------------------------------
+        // Send next frame
+        // ------------------------------
+
+        sendFrame();
+
+    };
+
+
+    // ------------------------------
+    // WebSocket closed
+    // ------------------------------
+
+    socket.onclose = function() {
+
+        console.log(
+            "WebSocket disconnected"
+        );
+
+        status.textContent =
+            "Docker connection closed";
+
+        status.style.color =
+            "red";
+
+    };
+
+
+    // ------------------------------
+    // WebSocket error
+    // ------------------------------
+
+    socket.onerror = function(error) {
+
+        console.error(
+            "WebSocket error:",
+            error
+        );
+
+        status.textContent =
+            "Docker WebSocket error";
+
+        status.style.color =
+            "red";
+
+    };
+
+}
+
+
+// ======================================
+// SEND FRAME TO DOCKER
+// ======================================
+
+function sendFrame() {
+
+
+    if (
+        !socket ||
+        socket.readyState !== WebSocket.OPEN
+    ) {
+
+        return;
+
+    }
+
+
+    if (
+        video.readyState < 2
+    ) {
+
+        requestAnimationFrame(
+            sendFrame
+        );
+
+        return;
+
+    }
+
+
+    // ------------------------------
+    // Create temporary canvas
+    // ------------------------------
+
+    const canvas =
+        document.createElement("canvas");
+
+
+    canvas.width =
+        video.videoWidth;
+
+    canvas.height =
+        video.videoHeight;
+
+
+    const context =
+        canvas.getContext("2d");
+
+
+    // ------------------------------
+    // Capture webcam frame
+    // ------------------------------
+
+    context.drawImage(
+        video,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+
+    // ------------------------------
+    // Convert frame to JPEG
+    // ------------------------------
+
+    canvas.toBlob(
+
+        function(blob) {
+
+            if (
+                !blob ||
+                socket.readyState !== WebSocket.OPEN
+            ) {
+
+                return;
+
+            }
+
+
+            const reader =
+                new FileReader();
+
+
+            reader.onloadend =
+                function() {
+
+                    if (
+                        socket.readyState ===
+                        WebSocket.OPEN
+                    ) {
+
+                        socket.send(
+                            reader.result
+                        );
+
+                    }
+
+                };
+
+
+            reader.readAsDataURL(blob);
+
+        },
+
+        "image/jpeg",
+
+        0.7
+
+    );
+
+}
+
+
+</script>
+
+</body>
+
+</html>
